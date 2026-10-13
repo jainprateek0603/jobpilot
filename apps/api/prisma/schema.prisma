@@ -1,0 +1,238 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String
+  name           String
+  headline       String   @default("")
+  location       String   @default("")
+  phone          String   @default("")
+  linkedinUrl    String   @default("")
+  websiteUrl     String   @default("")
+  timezone       String   @default("UTC")
+  theme          String   @default("system")
+  emailReminders Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  refreshTokens   RefreshToken[]
+  applications    Application[]
+  resumes         Resume[]
+  reminders       Reminder[]
+  tailoredResumes TailoredResume[]
+  coverLetters    CoverLetter[]
+  interviewPreps  InterviewPrep[]
+  emailOutbox     EmailOutbox[]
+}
+
+model RefreshToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  replacedBy String?
+  userAgent  String    @default("")
+  ip         String    @default("")
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Application {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company        String
+  role           String
+  status         String   @default("WISHLIST")
+  position       Int      @default(0)
+  salaryMin      Int?
+  salaryMax      Int?
+  currency       String   @default("USD")
+  jobUrl         String   @default("")
+  location       String   @default("")
+  source         String   @default("")
+  notes          String   @default("")
+  jobDescription String   @default("")
+  appliedAt      DateTime?
+  deadlineAt     DateTime?
+  interviewAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  contacts        Contact[]
+  events          TimelineEvent[]
+  reminders       Reminder[]
+  tailoredResumes TailoredResume[]
+  coverLetters    CoverLetter[]
+  interviewPreps  InterviewPrep[]
+
+  @@index([userId, status, position])
+}
+
+model Contact {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  name          String
+  role          String      @default("")
+  email         String      @default("")
+  phone         String      @default("")
+  notes         String      @default("")
+  createdAt     DateTime    @default(now())
+}
+
+model TimelineEvent {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  type          String
+  title         String
+  body          String      @default("")
+  occurredAt    DateTime    @default(now())
+  createdAt     DateTime    @default(now())
+
+  @@index([applicationId, occurredAt])
+}
+
+model Resume {
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  content         String
+  fileName        String           @default("")
+  mimeType        String           @default("")
+  filePath        String           @default("")
+  isDefault       Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  tailoredResumes TailoredResume[]
+  coverLetters    CoverLetter[]
+
+  @@index([userId])
+}
+
+model TailoredResume {
+  id              String       @id @default(cuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resumeId        String?
+  resume          Resume?      @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  applicationId   String?
+  application     Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  jobDescription  String
+  content         String
+  matchScore      Int
+  missingKeywords String
+  provider        String
+  promptVersion   String
+  createdAt       DateTime     @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model CoverLetter {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applicationId  String?
+  application    Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  resumeId       String?
+  resume         Resume?      @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  tone           String
+  content        String
+  jobDescription String       @default("")
+  provider       String
+  promptVersion  String
+  createdAt      DateTime     @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model InterviewPrep {
+  id             String              @id @default(cuid())
+  userId         String
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applicationId  String?
+  application    Application?        @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  role           String
+  company        String              @default("")
+  jobDescription String              @default("")
+  provider       String
+  promptVersion  String
+  createdAt      DateTime            @default(now())
+  questions      InterviewQuestion[]
+
+  @@index([userId, createdAt])
+}
+
+model InterviewQuestion {
+  id       String           @id @default(cuid())
+  prepId   String
+  prep     InterviewPrep    @relation(fields: [prepId], references: [id], onDelete: Cascade)
+  question String
+  category String
+  tips     String           @default("")
+  order    Int
+  answers  PracticeAnswer[]
+}
+
+model PracticeAnswer {
+  id         String            @id @default(cuid())
+  questionId String
+  question   InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answer     String
+  feedback   String
+  score      Int
+  provider   String
+  createdAt  DateTime          @default(now())
+}
+
+model Reminder {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applicationId String?
+  application  Application?  @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  title        String
+  body         String        @default("")
+  dueAt        DateTime
+  type         String
+  status       String        @default("pending")
+  emailSubject String        @default("")
+  emailBody    String        @default("")
+  sentAt       DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  outbox       EmailOutbox[]
+
+  @@index([status, dueAt])
+  @@index([userId, dueAt])
+}
+
+model EmailOutbox {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reminderId String?
+  reminder   Reminder? @relation(fields: [reminderId], references: [id], onDelete: SetNull)
+  toAddress  String
+  subject    String
+  body       String
+  status     String
+  error      String    @default("")
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
