@@ -2,163 +2,167 @@
 
 JobPilot is a job-search command center. A person tracks applications on a board, keeps resumes, tailors them to a posting, drafts cover letters, practices interview answers, and reviews how the search is moving.
 
-## Layout
+## Folder structure
 
 ```
 jobpilot/
-  apps/api/                 Express API, Prisma, cron, prompts
-    prisma/schema.prisma    SQLite datasource
-    prisma/schema.postgres.prisma
-    prompts/v1/             Versioned prompt files
-    src/
-      app.ts                HTTP app, no listening
-      index.ts              Listen, cron, static SPA
-      config.ts
-      lib/                  prisma, errors, tokens, passwords, ssrf
-      middleware/           auth, errors, rate limit, validation
-      routes/
-      services/
-      ai/                   provider interface and implementations
-      jobs/scheduler.ts
-      scripts/seed.ts
-    tests/
-  apps/web/                 Vite React SPA
-    src/pages/
-    src/components/
-    src/lib/
-    e2e/                    Playwright specs live at the repo root
-  packages/shared/          Schemas and pure domain functions
-  e2e/                      Playwright
+  apps/
+    api/                      Express API
+      prisma/
+        schema.prisma         SQLite (local, test, CI)
+        schema.postgres.prisma
+      prompts/v1/             Versioned AI prompts
+      src/
+        index.ts              Process entry: env, listen, cron
+        app.ts                Express app factory
+        config.ts
+        routes/               HTTP adapters
+        services/             Use cases and authorization
+        middleware/
+        ai/                   Provider interface and adapters
+        jobs/                 Reminder scheduler
+        lib/                  Prisma, tokens, errors, SSRF, mail
+        seed/                 Demo data
+      tests/
+    web/                      Vite + React
+      src/
+        pages/
+        components/
+        lib/                  API client, auth, theme, board math
+      e2e/                    Playwright specs live at repo /e2e
+  packages/
+    shared/                   Schemas and pure domain functions
+  e2e/
   .github/workflows/ci.yml
   docker-compose.yml
   Dockerfile
 ```
 
+Dependency direction: `web` and `api` may import `@jobpilot/shared`. Shared imports neither app. The web app talks only to HTTP. Prisma is an API detail.
+
 ## Runtime
 
-| Piece | Dev | Production |
-| --- | --- | --- |
-| Web | Vite on port 5173, proxies `/api` | Static files from `apps/web/dist` |
-| API | `tsx` on port 4000 | `node apps/api/dist/index.js` |
-| Database | SQLite file | PostgreSQL in Compose |
-| AI | `AI_PROVIDER`, default `mock` | Same, usually `openai` or `anthropic` |
-| Mail | Outbox when SMTP is unset | Nodemailer when SMTP is set |
-| Reminders | In-process cron, every minute | Same |
+| Mode | Web | API | Database |
+| --- | --- | --- | --- |
+| Local dev | Vite `:5173`, proxies `/api` | `tsx` `:4000` | SQLite file |
+| Test | Vitest + jsdom, Playwright against Vite | Supertest, or listen for e2e | SQLite file per suite |
+| Docker | Built assets served by Express | Node `:4000` | PostgreSQL 16 |
+
+`GET /api/health` checks that the process and the database respond.
 
 ## Data model
 
-All primary keys are cuid strings. Every user-owned table has `userId` and an index that starts with it.
+All primary keys are cuid strings. Timestamps are UTC.
 
-- **User** — email, password hash, profile fields, theme (`light` \| `dark` \| `system`), email reminder flag.
-- **RefreshToken** — hashed token, expiry, revocation, replacement id.
-- **Application** — company, role, status (`WISHLIST`, `APPLIED`, `INTERVIEW`, `OFFER`, `REJECTED`), position inside the column, salary range, currency, URL, location, source, notes, job description, applied / deadline / interview timestamps.
-- **Contact** — name, role, email, phone, notes. Belongs to an application.
-- **TimelineEvent** — type, title, body, time. Written when an application is created, moved, noted, or when AI artifacts are saved.
-- **Resume** — title, plain text, optional stored file name and path, default flag.
-- **TailoredResume** — source resume, optional application, job description, tailored text, match score, missing keywords JSON, provider, prompt version.
-- **CoverLetter** — tone, content, optional application and resume, provider, prompt version.
-- **InterviewPrep** — role, company, optional application, questions.
-- **InterviewQuestion** — category, prompt, tips, order.
-- **PracticeAnswer** — answer text, feedback, score.
-- **Reminder** — due time, type (`follow_up`, `interview`, `deadline`, `custom`), status (`pending`, `sent`, `dismissed`, `completed`), drafted subject and body.
-- **EmailOutbox** — recipient, subject, body, delivery status.
+**User** — email (unique), password hash, name, headline, location, phone, LinkedIn, website, timezone, theme (`light` \| `dark` \| `system`), `emailReminders`.
 
-Status changes record a timeline row. Reaching Interview or Offer is inferred from current status or from those timeline rows so a later rejection still counts as an interview in analytics.
+**RefreshToken** — hashed `jti`, expiry, `revokedAt`, `replacedBy`, user agent, IP. Cascade delete with the user.
 
-## Auth flow
+**Application** — user, company, role, status (`WISHLIST` \| `APPLIED` \| `INTERVIEW` \| `OFFER` \| `REJECTED`), `position`, optional salary min/max, currency, job URL, location, source, notes, job description, `appliedAt`, `deadlineAt`, `interviewAt`. Index on `(userId, status, position)`.
 
-1. `POST /api/auth/register` or `POST /api/auth/login` verifies credentials, returns an access token, and sets the refresh cookie.
-2. The SPA keeps the access token in memory and sends it on API calls.
-3. On 401, the SPA calls `POST /api/auth/refresh` (cookie). The API rotates the refresh token and returns a new access token.
-4. `POST /api/auth/logout` revokes the current refresh token and clears the cookie.
-5. `POST /api/auth/change-password` revokes every refresh token.
+**Contact** — belongs to an application. Name, role, email, phone, notes.
 
-Secrets shorter than 32 characters are rejected at startup outside tests.
+**TimelineEvent** — application, type (`created`, `status_change`, `note`, `contact`, `reminder`, `tailor`, `cover_letter`, `interview`), title, body, `occurredAt`. Status changes store the new status in `body`.
 
-## HTTP API
+**Resume** — user, title, plain-text content, original file name, mime type, stored basename, `isDefault`.
+
+**TailoredResume** — user, resume, optional application, job description, content, match score 0–100, missing keywords (JSON text), provider name, prompt version.
+
+**CoverLetter** — user, optional application, tone, content, job description, provider, prompt version.
+
+**InterviewPrep** — user, optional application, role, company, provider, prompt version. **InterviewQuestion** children (question, category, tips, order). **PracticeAnswer** children (answer, feedback, score, provider).
+
+**Reminder** — user, optional application, title, body, `dueAt`, type (`follow_up` \| `interview` \| `deadline` \| `custom`), status (`pending` \| `sent` \| `dismissed` \| `completed`), email subject and body, `sentAt`.
+
+**EmailOutbox** — user, optional reminder, to, subject, body, delivery status (`sent` \| `stored` \| `skipped_opt_out` \| `failed`), error text.
+
+Uploads live on disk under `UPLOAD_DIR`. The database stores the basename only.
+
+## Auth
+
+1. `POST /api/auth/register` and `POST /api/auth/login` verify the password, set the refresh cookie, and return an access token plus the public user.
+2. Other routes require `Authorization: Bearer`.
+3. `POST /api/auth/refresh` rotates the cookie.
+4. `POST /api/auth/logout` revokes the presented refresh token.
+5. `POST /api/auth/change-password` requires the current password and revokes refresh tokens.
+
+Login failures use one message for unknown email and wrong password. Auth routes are rate limited, separately from a global API limit. Limits are skipped only when `RATE_LIMIT_DISABLED=true` (tests).
+
+## API
 
 JSON envelope: `{ "data": ... }` or `{ "error": { "code", "message", "fields?" } }`.
 
-| Method | Path | Auth | Purpose |
-| --- | --- | --- | --- |
-| GET | `/api/health` | no | Liveness |
-| POST | `/api/auth/register` | no | Create account |
-| POST | `/api/auth/login` | no | Sign in |
-| POST | `/api/auth/refresh` | cookie | Rotate session |
-| POST | `/api/auth/logout` | cookie | Revoke session |
-| POST | `/api/auth/change-password` | yes | Change password |
-| GET | `/api/auth/me` | yes | Id, email, name |
-| GET | `/api/profile` | yes | Profile and settings |
-| PATCH | `/api/profile` | yes | Update profile |
-| PATCH | `/api/settings` | yes | Theme and email reminders |
-| GET | `/api/applications` | yes | List, optional `q` and `status` |
-| POST | `/api/applications` | yes | Create |
-| GET | `/api/applications/:id` | yes | Detail with contacts, events, reminders |
-| PATCH | `/api/applications/:id` | yes | Update fields |
-| DELETE | `/api/applications/:id` | yes | Delete |
-| POST | `/api/applications/reorder` | yes | Set column membership and order |
-| POST | `/api/applications/parse-link` | yes | Prefill company and role |
-| GET | `/api/applications/export` | yes | CSV download |
-| POST | `/api/applications/import` | yes | CSV upload |
-| POST | `/api/applications/:id/contacts` | yes | Add contact |
-| PATCH | `/api/contacts/:id` | yes | Update contact |
-| DELETE | `/api/contacts/:id` | yes | Delete contact |
-| POST | `/api/applications/:id/events` | yes | Add a note to the timeline |
-| GET | `/api/resumes` | yes | List |
-| POST | `/api/resumes` | yes | Create from text |
-| POST | `/api/resumes/upload` | yes | PDF, txt, or md upload |
-| GET | `/api/resumes/:id` | yes | One resume |
-| PATCH | `/api/resumes/:id` | yes | Update |
-| DELETE | `/api/resumes/:id` | yes | Delete |
-| POST | `/api/ai/tailor` | yes | Tailor a resume |
-| GET | `/api/ai/tailored` | yes | List tailored resumes |
-| GET | `/api/ai/tailored/:id` | yes | One tailored resume |
-| POST | `/api/ai/cover-letter` | yes | Draft a cover letter |
-| GET | `/api/ai/cover-letters` | yes | List |
-| POST | `/api/ai/interview-prep` | yes | Generate questions |
-| GET | `/api/ai/interview-prep` | yes | List sessions |
-| GET | `/api/ai/interview-prep/:id` | yes | Session with answers |
-| POST | `/api/ai/interview-prep/:prepId/answers` | yes | Score a practice answer |
-| GET | `/api/reminders` | yes | List |
-| POST | `/api/reminders` | yes | Create |
-| PATCH | `/api/reminders/:id` | yes | Update |
-| DELETE | `/api/reminders/:id` | yes | Delete |
-| POST | `/api/reminders/run` | yes | Process this user's due reminders |
-| GET | `/api/calendar` | yes | Interviews, deadlines, reminders in a range |
-| GET | `/api/analytics` | yes | Weekly counts, rates, funnel |
+List endpoints include `meta` when they paginate (`page`, `pageSize`, `total`).
 
-Validation is Zod from `@jobpilot/shared`. Rate limits: 300 requests per minute per IP globally, 20 per 15 minutes on auth routes, 30 per hour on AI routes. `RATE_LIMIT_DISABLED=true` turns them off for tests.
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/api/auth/register` | Create account |
+| POST | `/api/auth/login` | Sign in |
+| POST | `/api/auth/refresh` | Rotate refresh token |
+| POST | `/api/auth/logout` | Revoke refresh token |
+| POST | `/api/auth/change-password` | Change password |
+| GET | `/api/auth/me` | Current user summary |
+| GET | `/api/profile` | Profile |
+| PATCH | `/api/profile` | Update profile |
+| PATCH | `/api/settings` | Theme, timezone, email reminders |
+| GET | `/api/applications` | List (query, status, page) |
+| POST | `/api/applications` | Create |
+| GET | `/api/applications/export` | CSV download |
+| POST | `/api/applications/import` | CSV import |
+| POST | `/api/applications/parse-link` | Parse or fetch a job URL |
+| POST | `/api/applications/reorder` | Move cards |
+| GET | `/api/applications/:id` | Detail with contacts, events, reminders |
+| PATCH | `/api/applications/:id` | Update |
+| DELETE | `/api/applications/:id` | Delete |
+| POST | `/api/applications/:id/contacts` | Add contact |
+| PATCH | `/api/contacts/:id` | Update contact |
+| DELETE | `/api/contacts/:id` | Delete contact |
+| POST | `/api/applications/:id/events` | Add a note |
+| GET | `/api/resumes` | List resumes |
+| POST | `/api/resumes` | Create from text |
+| POST | `/api/resumes/upload` | PDF, txt, or md upload |
+| GET | `/api/resumes/:id` | One resume |
+| PATCH | `/api/resumes/:id` | Update, including default flag |
+| DELETE | `/api/resumes/:id` | Delete resume and file |
+| GET | `/api/resumes/:id/file` | Download original file |
+| POST | `/api/ai/tailor` | Tailor a resume, persist result |
+| GET | `/api/ai/tailored` | List tailored resumes |
+| GET | `/api/ai/tailored/:id` | One tailored resume |
+| POST | `/api/ai/cover-letter` | Generate a cover letter |
+| GET | `/api/ai/cover-letters` | List cover letters |
+| POST | `/api/ai/interview-prep` | Generate questions |
+| GET | `/api/ai/interview-prep` | List sessions |
+| GET | `/api/ai/interview-prep/:id` | Session with questions and answers |
+| POST | `/api/ai/interview-prep/:id/answer` | Practice feedback |
+| GET | `/api/reminders` | List reminders |
+| POST | `/api/reminders` | Create |
+| PATCH | `/api/reminders/:id` | Update |
+| DELETE | `/api/reminders/:id` | Delete |
+| POST | `/api/reminders/process` | Run due reminders for the signed-in user |
+| GET | `/api/calendar` | Interviews, deadlines, reminders in a range |
+| GET | `/api/analytics` | Weekly counts, rates, funnel |
+| GET | `/api/health` | Liveness and database |
 
-Errors: validation 400, auth 401, conflict 409, missing 404, unexpected 500 with no stack in the body. A handler wraps async route errors.
+Validation is Zod from `@jobpilot/shared`. Unknown application statuses, inverted salary ranges, and oversized text are rejected before a write.
 
-## AI contract
+## AI flow
 
-Providers implement:
-
-```ts
-complete(input: { system: string; user: string; temperature?: number; maxTokens?: number }): Promise<string>
+```
+route → service (ownership checks) → render prompts/v1/*.md
+      → AIProvider.complete → parse JSON with Zod → Prisma
 ```
 
-Tasks and files:
+Providers:
 
-| Task | Prompt | JSON |
-| --- | --- | --- |
-| Tailor resume | `prompts/v1/tailor-resume.md` | `resume`, `matchScore`, `missingKeywords` |
-| Cover letter | `prompts/v1/cover-letter.md` | `letter` |
-| Interview questions | `prompts/v1/interview-questions.md` | `questions[]` |
-| Answer feedback | `prompts/v1/answer-feedback.md` | `score`, `feedback` |
-| Follow-up draft | `prompts/v1/follow-up-email.md` | `subject`, `body` |
+- `MockProvider` — deterministic local completion
+- `OpenAIProvider` — `POST /v1/chat/completions`
+- `AnthropicProvider` — `POST /v1/messages`
 
-## Analytics
+`createProvider()` reads `AI_PROVIDER`. A missing API key fails the AI request with 503, not process startup, so health checks still pass.
 
-Pure function in `@jobpilot/shared`:
+## Frontend
 
-- **Applications per week** — counts by `createdAt` for the last 12 weeks, Monday start.
-- **Response rate** — applications that left Wishlist and later sit in Interview, Offer, or Rejected, or have a matching status-change event, divided by submitted applications.
-- **Interview rate** — applications that reached Interview or Offer (current status or timeline), divided by submitted applications.
-- **Funnel** — Wishlist, then submitted, then reached interview, then offer. Counts are cumulative reaches, not only the current column.
-
-## Frontend routes
+Routes:
 
 | Path | Page |
 | --- | --- |
@@ -168,25 +172,38 @@ Pure function in `@jobpilot/shared`:
 | `/app/board` | Kanban |
 | `/app/applications/:id` | Detail, contacts, timeline |
 | `/app/resumes` | Resume library |
-| `/app/tailor` | Tailor flow |
+| `/app/tailor` | Tailor a resume |
 | `/app/cover-letters` | Cover letters |
-| `/app/interviews` | Prep and practice |
+| `/app/interviews` | Generate a prep session |
+| `/app/interviews/:id` | Practice |
 | `/app/calendar` | Month calendar |
 | `/app/settings` | Profile, theme, password |
 
-The shell shows a loading state while the session is restored, toasts for success and failure, and empty states that name the next action.
+Signed-out visits to `/app/*` go to `/login`. The access token is kept in memory. On load, the app calls `/api/auth/refresh` and, on success, stores the new access token. A 401 on an API call refreshes once and retries.
 
-## Jobs
+The board uses `@dnd-kit` for pointer and keyboard dragging, and a "Move to" control that calls the same reorder helper. Charts (`recharts`) sit next to a data table of the same numbers.
 
-`jobs/scheduler.ts` runs every minute outside `NODE_ENV=test`. It selects pending reminders with `dueAt <= now`, drafts a follow-up when needed, writes the outbox, and marks the reminder sent. `POST /api/reminders/run` uses the same function for the signed-in user so tests do not wait for the clock.
+Import and export live on the board. Pasting a job URL runs the shared parser immediately.
+
+## Reminders
+
+`src/jobs/scheduler.ts` registers a cron (`* * * * *`) from `index.ts`. Tests call `processDueReminders` directly and do not start cron. The scheduler is not started when `NODE_ENV=test`.
+
+## Error handling
+
+`AppError` carries HTTP status and a stable `code`. The error middleware maps Zod failures to 400, unique constraint conflicts to 409, upload limits to 400, and everything else to 500 with a fixed message. Stack traces stay in the server log.
+
+## Security controls
+
+Helmet, CORS allowlist, JSON body limit 2mb, upload limit 5mb and extension/mime checks, bcrypt, hashed refresh tokens, rotation and reuse detection, per-user queries, auth and AI rate limits, CSV formula neutralization, SSRF checks on posting fetch, production CSP that allows only same-origin scripts (theme init is an external file).
 
 ## Testing
 
-- Vitest unit tests for shared functions and API services.
-- Vitest + Supertest integration tests against SQLite, single-threaded so the file database does not lock.
-- Playwright: sign up, add an application, move it across the board, generate a tailored resume with the mock provider.
-- Coverage thresholds are 85% lines, statements, and functions on shared, api, and web.
+- `packages/shared`: parser, CSV, analytics, schemas
+- `apps/api`: Supertest against `createApp()`, SQLite, mock AI, stubbed fetch for hosted providers
+- `apps/web`: Testing Library, mocked `fetch`
+- `e2e`: Playwright, Chromium, mock AI, dedicated SQLite file
 
-## Deployment
+## Build and deploy
 
-`Dockerfile` builds the SPA and API, generates the Postgres client, and starts `index.js`. Compose runs Postgres 16 and the app. `.env.example` lists every variable. `npm run db:seed` loads a demo user.
+`npm run build` typechecks and builds the web app, then compiles the API. The Docker image generates the Prisma client from the Postgres schema, pushes the schema on start, and listens on 4000. See `README.md` for setup commands.

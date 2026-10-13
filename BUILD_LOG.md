@@ -2,34 +2,8 @@
 
 ## Phase 1 — Plan
 
-- Created `D:\Downloads\jobpilot` as its own git repository, beside the FreelanceHub workspace at `D:\Downloads\projects xx`.
-- Wrote `ARCHITECTURE.md` (layout, schema, API, AI, analytics, testing, deployment) and `DECISIONS.md`.
-- Lint, type-check, and tests are not in this phase. They start with the toolchain in phase 2.
+Recorded the monorepo layout, SQLite-plus-Postgres data model, HTTP API, auth, AI provider boundary, and test plan in `ARCHITECTURE.md`. Recorded tradeoffs in `DECISIONS.md`.
 
-## Phase 2 — Backend
+Lint, type-check, and tests are not in the tree yet. They start with the toolchain in phase 2. This phase is documentation only.
 
-Pending.
-
-## Phase 3 — AI services
-
-Pending.
-
-## Phase 4 — Frontend
-
-Pending.
-
-## Phase 5 — Testing
-
-Pending.
-
-## Phase 6 — Security, performance, accessibility
-
-Pending.
-
-## Phase 7 — DevOps and docs
-
-Pending.
-
-## Phase 8 — Final review
-
-Pending.
+JobPilot is a new git repository at `D:\Downloads\jobpilot`, beside the FreelanceHub workspace. No FreelanceHub files were changed.
