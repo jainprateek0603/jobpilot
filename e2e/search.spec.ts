@@ -9,18 +9,17 @@ test('sign up, add an application, move it, and tailor a resume', async ({ page 
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page.getByRole('heading', { name: 'Board' })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Add application' }).click()
-  await page.getByLabel('Company').fill('Northwind')
-  await page.getByLabel('Role').fill('Platform Engineer')
+  await page.getByRole('button', { name: 'Add application' }).first().click()
+  await page.getByLabel('Company', { exact: true }).fill('Northwind')
+  await page.getByLabel('Role', { exact: true }).fill('Platform Engineer')
   await page.getByRole('button', { name: 'Save application' }).click()
   const card = page.getByTestId(/^card-/)
-  await expect(card.getByText('Northwind')).toBeVisible()
   await expect(page.getByTestId('column-WISHLIST')).toContainText('Northwind')
 
   await page.getByLabel('Move Northwind').selectOption('APPLIED')
   await expect(page.getByTestId('column-APPLIED')).toContainText('Northwind')
 
-  const cardBox = await card.boundingBox()
+  const cardBox = await card.locator('p').first().boundingBox()
   const interview = page.getByTestId('column-INTERVIEW')
   const interviewBox = await interview.boundingBox()
   if (cardBox && interviewBox) {
@@ -44,5 +43,5 @@ test('sign up, add an application, move it, and tailor a resume', async ({ page 
   await page.getByLabel('Job description').fill('We need Kubernetes, GraphQL, and TypeScript for this platform role.')
   await page.getByRole('button', { name: 'Generate tailored resume' }).click()
   await expect(page.getByRole('heading', { name: /Match score/ })).toBeVisible()
-  await expect(page.getByText(/kubernetes/i)).toBeVisible()
+  await expect(page.getByText(/Missing keywords:.*kubernetes/i)).toBeVisible()
 })

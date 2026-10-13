@@ -26,10 +26,10 @@
 
 ## Phase 5 — Testing
 
-- Shared package: 94% lines, 85% branches.
+- Shared package: 94% lines, 85% branches, 92% functions.
 - API: 94% lines, 77% branches, 94% functions. Integration tests cover auth, the board, resumes, AI, reminders, and authorization.
-- Web unit tests cover board moves and calendar dates. Playwright covers sign-up, adding an application, moving it, and tailoring a resume.
-- Page components are not in the web coverage threshold. That is the main remaining test gap.
+- Web: 94% lines, 81% functions, 76% branches. A Testing Library flow signs up and walks the board, detail, resumes, tailoring, letters, interviews, calendar, and settings.
+- Playwright covers sign-up, adding an application, moving it, and generating a tailored resume.
 
 ## Phase 6 — Security, performance, and accessibility
 
@@ -48,5 +48,5 @@
 ## Phase 8 — Final review
 
 - Lint, type-check, coverage, and the production web/API build passed.
-- Shared coverage is 94% lines. API coverage is 94% lines and 77% branches. The web coverage gate is the board and date logic, which is fully line-covered, and a UI flow test walks the signed-in pages.
-- Playwright spec is in `e2e/search.spec.ts`.
+- Shared coverage is 94% lines. API coverage is 94% lines and 77% branches. Web coverage is 94% lines, 81% functions, and 76% branches.
+- Playwright passed: sign up, add an application, move it to Applied and Interview, and generate a tailored resume with the mock provider.
