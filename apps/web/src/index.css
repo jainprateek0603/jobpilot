@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-paper font-sans text-ink antialiased dark:bg-night dark:text-[#E6EFEA];
+  }
+  :focus-visible {
+    outline: 2px solid #145c38;
+    outline-offset: 2px;
+  }
+  html.dark :focus-visible {
+    outline-color: #8fcbb0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
