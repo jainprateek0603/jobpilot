@@ -12,7 +12,9 @@ playwright/.cache
 *.db-wal
 *.db-shm
 uploads
+uploads-test
 apps/api/uploads
+apps/api/uploads-test
 .DS_Store
 Thumbs.db
 *.tsbuildinfo
