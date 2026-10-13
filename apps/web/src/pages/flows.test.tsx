@@ -79,7 +79,13 @@ function route(url: string, method: string) {
       funnel: [{ stage: 'Saved', count: 1 }],
     })
   }
-  if (url.includes('/api/calendar')) return json({ interviews: [], deadlines: [], reminders: [] })
+  if (url.includes('/api/calendar')) {
+    return json({
+      interviews: [{ id: 'i1', company: 'Harbor', role: 'Designer', at: new Date().toISOString() }],
+      deadlines: [{ id: 'd1', company: 'Northwind', role: 'Engineer', at: new Date().toISOString() }],
+      reminders: [{ id: 'r1', title: 'Follow up', dueAt: new Date().toISOString(), status: 'pending' }],
+    })
+  }
   if (url.includes('/api/applications/export')) return json('company,role\nNorthwind,Engineer')
   if (url.includes('/api/applications/import')) return json({ imported: 1, errors: [] })
   if (url.includes('/api/applications/parse-link')) return json({ company: 'Spotify', role: 'Engineer', source: 'lever', warning: '' })
@@ -151,11 +157,18 @@ describe('app flows', () => {
     await person.click(screen.getByRole('button', { name: 'Export CSV' }))
 
     await person.click(screen.getByRole('button', { name: 'Add application' }))
+    await person.type(screen.getByLabelText('Link or company — role'), 'https://jobs.lever.co/spotify/senior-backend-engineer')
+    await person.tab()
+    await person.click(screen.getByRole('button', { name: 'Read link' }))
+    await person.selectOptions(screen.getByLabelText('Column'), 'APPLIED')
+    await person.type(screen.getByLabelText('Notes'), 'Referral')
     await person.clear(screen.getByLabelText('Company'))
     await person.type(screen.getByLabelText('Company'), 'Harbor')
     await person.clear(screen.getByLabelText('Role'))
     await person.type(screen.getByLabelText('Role'), 'Designer')
     await person.click(screen.getByRole('button', { name: 'Save application' }))
+    await person.type(screen.getByLabelText('Search'), 'north')
+    await person.selectOptions(screen.getByLabelText('Move Northwind'), 'INTERVIEW')
 
     await person.click(screen.getByRole('link', { name: 'Dashboard' }))
     expect(await screen.findByRole('heading', { name: 'This search' })).toBeInTheDocument()
@@ -185,12 +198,17 @@ describe('app flows', () => {
     expect(await screen.findByText(/Score 8/)).toBeInTheDocument()
 
     await person.click(screen.getByRole('link', { name: 'Calendar' }))
-    await person.click(await screen.findByRole('button', { name: 'Next month' }))
+    await person.click(await screen.findByRole('button', { name: 'Previous month' }))
+    await person.click(screen.getByRole('button', { name: 'Next month' }))
 
     await person.click(screen.getByRole('link', { name: 'Settings' }))
     expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument()
     await person.clear(screen.getByLabelText('Headline'))
     await person.type(screen.getByLabelText('Headline'), 'Product engineer')
+    await person.type(screen.getByLabelText('Location'), 'Bengaluru')
+    await person.type(screen.getByLabelText('Phone'), '555')
+    await person.selectOptions(screen.getByLabelText('Theme'), 'dark')
+    await person.click(screen.getByLabelText('Email me when a reminder is due'))
     await person.click(screen.getByRole('button', { name: 'Save profile' }))
     await person.click(screen.getByRole('button', { name: 'Sign out' }))
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
