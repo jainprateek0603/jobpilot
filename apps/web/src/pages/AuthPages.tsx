@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { ApiError } from '../lib/api'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { ApiError, api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { Button, Field, TextInput } from '../components/ui'
 
@@ -41,6 +41,100 @@ export function LoginPage() {
           {pending ? 'Signing in…' : 'Sign in'}
         </Button>
       </form>
+      <Link className="mt-4 inline-block text-sm underline" to="/forgot-password">
+        Forgot password
+      </Link>
+    </AuthFrame>
+  )
+}
+
+export function ForgotPasswordPage() {
+  const [email, setEmail] = useState('')
+  const [message, setMessage] = useState('')
+  const [resetUrl, setResetUrl] = useState('')
+  const [error, setError] = useState('')
+  const [pending, setPending] = useState(false)
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    setPending(true)
+    setError('')
+    try {
+      const result = await api<{ message: string; resetUrl?: string }>('/api/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      })
+      setMessage(result.message)
+      setResetUrl(result.resetUrl ?? '')
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Could not start a reset')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <AuthFrame title="Reset password" alternate={{ href: '/login', label: 'Sign in' }}>
+      <form className="space-y-4" onSubmit={onSubmit}>
+        <Field label="Email" error={error}>
+          <TextInput type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
+        </Field>
+        <Button type="submit" disabled={pending}>
+          {pending ? 'Sending…' : 'Send reset link'}
+        </Button>
+      </form>
+      {message ? <p className="mt-4 text-sm">{message}</p> : null}
+      {resetUrl ? (
+        <p className="mt-2 text-sm">
+          Mail is not configured on this server.{' '}
+          <a className="underline" href={resetUrl}>
+            Choose a new password
+          </a>
+        </p>
+      ) : null}
+    </AuthFrame>
+  )
+}
+
+export function ResetPasswordPage() {
+  const [params] = useSearchParams()
+  const navigate = useNavigate()
+  const token = params.get('token') ?? ''
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [pending, setPending] = useState(false)
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    setPending(true)
+    setError('')
+    try {
+      await api('/api/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ token, newPassword: password }),
+      })
+      navigate('/login')
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Could not reset the password')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <AuthFrame title="Choose a new password" alternate={{ href: '/login', label: 'Sign in' }}>
+      {token ? (
+        <form className="space-y-4" onSubmit={onSubmit}>
+          <Field label="New password" error={error}>
+            <TextInput type="password" autoComplete="new-password" required minLength={10} value={password} onChange={(event) => setPassword(event.target.value)} />
+          </Field>
+          <Button type="submit" disabled={pending}>
+            {pending ? 'Saving…' : 'Save password'}
+          </Button>
+        </form>
+      ) : (
+        <p>That reset link is invalid or expired.</p>
+      )}
     </AuthFrame>
   )
 }

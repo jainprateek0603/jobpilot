@@ -38,6 +38,15 @@ export const changePasswordSchema = z.object({
   newPassword: passwordSchema,
 })
 
+export const forgotPasswordSchema = z.object({
+  email: emailSchema,
+})
+
+export const resetPasswordSchema = z.object({
+  token: z.string().trim().min(20, 'That reset link is invalid'),
+  newPassword: passwordSchema,
+})
+
 const optionalUrl = z
   .string()
   .trim()

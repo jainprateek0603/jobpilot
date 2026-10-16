@@ -45,6 +45,13 @@
 - `Dockerfile` and `docker-compose.yml` run the API with PostgreSQL.
 - `.env.example`, `npm run db:seed`, `README.md`, and `API.md`.
 
+## Follow-up
+
+- Signed-in pages load on demand. The first JavaScript file dropped from about 789 kB to 338 kB. Charts load with the dashboard, and drag-and-drop loads with the board.
+- Due reminders are claimed before they are sent. A second server skips a reminder that is already being processed, and a claim older than 10 minutes is tried again.
+- Password reset works while signed out. The link is a one-hour token stored as a hash, and using it signs out other sessions. Outside production, with no mail server, the API returns the link.
+- The dashboard chart is CSS bars. The dashboard chunk dropped from about 377 kB to 2.5 kB.
+
 ## Phase 8 — Final review
 
 - Lint, type-check, coverage, and the production web/API build passed.

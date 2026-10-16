@@ -16,6 +16,10 @@ Send the access token as `Authorization: Bearer`. The refresh token is an HttpOn
 
 `GET /api/auth/me`
 
+`POST /api/auth/forgot-password` `{ email }` always answers the same way, so the response does not reveal whether the email is registered. Outside production, when mail is not configured, the response also includes `resetUrl`.
+
+`POST /api/auth/reset-password` `{ token, newPassword }`
+
 `POST /api/auth/change-password` `{ currentPassword, newPassword }`
 
 Passwords need 10 to 72 characters, a letter, and a number.

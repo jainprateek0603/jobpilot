@@ -181,7 +181,7 @@ Routes:
 
 Signed-out visits to `/app/*` go to `/login`. The access token is kept in memory. On load, the app calls `/api/auth/refresh` and, on success, stores the new access token. A 401 on an API call refreshes once and retries.
 
-The board uses `@dnd-kit` for pointer and keyboard dragging, and a "Move to" control that calls the same reorder helper. Charts (`recharts`) sit next to a data table of the same numbers.
+The board uses `@dnd-kit` for pointer and keyboard dragging, and a "Move to" control that calls the same reorder helper. Weekly counts are CSS bars next to a data table of the same numbers. A signed-out password reset emails a one-hour link and, when mail is not configured outside production, returns that link in the response.
 
 Import and export live on the board. Pasting a job URL runs the shared parser immediately.
 

@@ -91,3 +91,7 @@ The interface is a filing board, not a generic dashboard. Cool paper background 
 ## 15. What is intentionally out of scope
 
 Billing, team accounts, OAuth, sending mail directly to employers, and a background worker process separate from the API. Reminder delivery runs in the API process.
+
+## 16. Password reset
+
+A signed-out person can ask for a reset by email. The API always answers the same way, so the response does not reveal whether that email is registered. The link holds a random token; only its hash is stored, it lasts one hour, and using it or asking again retires older links. Resetting the password revokes refresh sessions. Outside production, when SMTP is not configured, the response includes the link so local development works. Production never returns the link.

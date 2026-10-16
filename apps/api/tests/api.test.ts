@@ -88,6 +88,22 @@ describe('auth and profile', () => {
   })
 })
 
+it('resets a password from a one-time link', async () => {
+    const email = `reset-${Date.now()}@example.com`
+    await request(app).post('/api/auth/register').send({ email, password: 'Password123', name: 'Ada' })
+    const unknown = await request(app).post('/api/auth/forgot-password').send({ email: 'nobody@example.com' })
+    expect(unknown.status).toBe(200)
+    expect(unknown.body.data.resetUrl).toBeUndefined()
+    const asked = await request(app).post('/api/auth/forgot-password').send({ email })
+    expect(asked.body.data.message).toMatch(/reset the password/)
+    const token = new URL(asked.body.data.resetUrl as string).searchParams.get('token')
+    const reset = await request(app).post('/api/auth/reset-password').send({ token, newPassword: 'Password4567' })
+    expect(reset.status).toBe(200)
+    expect((await request(app).post('/api/auth/login').send({ email, password: 'Password123' })).status).toBe(401)
+    expect((await request(app).post('/api/auth/login').send({ email, password: 'Password4567' })).status).toBe(200)
+    expect((await request(app).post('/api/auth/reset-password').send({ token, newPassword: 'Password89012' })).status).toBe(400)
+  })
+
 describe('applications', () => {
   it('tracks a role, moves it, and keeps other people out', async () => {
     const owner = await register()

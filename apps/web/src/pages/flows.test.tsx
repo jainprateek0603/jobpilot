@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -70,6 +70,10 @@ function route(url: string, method: string) {
   }
   if (url.includes('/api/auth/register') || url.includes('/api/auth/login')) return json({ accessToken: 'token', user })
   if (url.includes('/api/auth/logout') || url.includes('/api/auth/change-password')) return json({ ok: true })
+  if (url.includes('/api/auth/forgot-password')) {
+    return json({ message: 'If that email has an account, you can reset the password.', resetUrl: 'http://127.0.0.1:5173/reset-password?token=reset-token-value-123456' })
+  }
+  if (url.includes('/api/auth/reset-password')) return json({ ok: true })
   if (url.includes('/api/analytics')) {
     return json({
       applicationsPerWeek: [{ weekStart: '2026-10-06', count: 1 }],
@@ -128,6 +132,10 @@ function renderApp(path = '/') {
   )
 }
 
+async function seeHeading(name: string) {
+  expect(await screen.findByRole('heading', { name }, { timeout: 8000 })).toBeInTheDocument()
+}
+
 describe('app flows', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => route(String(input), init?.method ?? 'GET')))
@@ -144,7 +152,7 @@ describe('app flows', () => {
     await person.type(screen.getByLabelText('Email'), 'ada@example.com')
     await person.type(screen.getByLabelText('Password'), 'Password123')
     await person.click(screen.getByRole('button', { name: 'Create account' }))
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument()
+    await seeHeading('Board')
     expect(await screen.findByText('Northwind')).toBeInTheDocument()
     await person.click(screen.getByRole('link', { name: 'Open' }))
     expect(await screen.findByRole('heading', { name: 'Northwind' })).toBeInTheDocument()
@@ -171,26 +179,30 @@ describe('app flows', () => {
     await person.selectOptions(screen.getByLabelText('Move Northwind'), 'INTERVIEW')
 
     await person.click(screen.getByRole('link', { name: 'Dashboard' }))
-    expect(await screen.findByRole('heading', { name: 'This search' })).toBeInTheDocument()
+    await seeHeading('This search')
 
     await person.click(screen.getByRole('link', { name: 'Resumes' }))
-    expect(await screen.findByText(/Base resume/)).toBeInTheDocument()
+    await seeHeading('Resumes')
+    expect(await screen.findByText(/Base resume/, {}, { timeout: 8000 })).toBeInTheDocument()
     await person.type(screen.getByLabelText('Title'), 'Second')
     await person.type(screen.getByLabelText('Resume text'), 'More TypeScript experience for platform work.')
     await person.click(screen.getByRole('button', { name: 'Save resume' }))
     await person.click(screen.getByRole('button', { name: 'Delete' }))
 
     await person.click(screen.getByRole('link', { name: 'Tailor' }))
+    await seeHeading('Tailor a resume')
     await person.type(screen.getByLabelText('Job description'), 'We need Kubernetes and TypeScript for the platform role.')
     await person.click(screen.getByRole('button', { name: 'Generate tailored resume' }))
     expect(await screen.findByText(/Match score/)).toBeInTheDocument()
 
     await person.click(screen.getByRole('link', { name: 'Letters' }))
+    await seeHeading('Cover letter')
     await person.type(screen.getByLabelText('Job description'), 'Design systems work for a product team building tools.')
     await person.click(screen.getByRole('button', { name: 'Generate cover letter' }))
     expect(await screen.findByText('Hello Harbor')).toBeInTheDocument()
 
     await person.click(screen.getByRole('link', { name: 'Interviews' }))
+    await seeHeading('Interview prep')
     await person.type(screen.getByLabelText('Role'), 'Engineer')
     await person.click(screen.getByRole('button', { name: 'Generate questions' }))
     await person.type(await screen.findByLabelText('Your answer'), 'I shipped a TypeScript service and cut review time by 20 percent with my team.')
@@ -202,7 +214,7 @@ describe('app flows', () => {
     await person.click(screen.getByRole('button', { name: 'Next month' }))
 
     await person.click(screen.getByRole('link', { name: 'Settings' }))
-    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    await seeHeading('Settings')
     await person.clear(screen.getByLabelText('Headline'))
     await person.type(screen.getByLabelText('Headline'), 'Product engineer')
     await person.type(screen.getByLabelText('Location'), 'Bengaluru')
@@ -211,10 +223,32 @@ describe('app flows', () => {
     await person.click(screen.getByLabelText('Email me when a reminder is due'))
     await person.click(screen.getByRole('button', { name: 'Save profile' }))
     await person.click(screen.getByRole('button', { name: 'Sign out' }))
-    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    await seeHeading('Sign in')
     await person.type(screen.getByLabelText('Email'), 'ada@example.com')
     await person.type(screen.getByLabelText('Password'), 'Password123')
     await person.click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument()
-  }, 20000)
+    await seeHeading('Board')
+  }, 30000)
+
+  it('sends a reset link and saves a new password', async () => {
+    const person = userEvent.setup({ delay: null })
+    const forgot = renderApp('/login')
+    await seeHeading('Sign in')
+    await person.click(screen.getByRole('link', { name: 'Forgot password' }))
+    await seeHeading('Reset password')
+    await person.type(screen.getByLabelText('Email'), 'ada@example.com')
+    await person.click(screen.getByRole('button', { name: 'Send reset link' }))
+    expect(await screen.findByText(/reset the password/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Choose a new password' })).toHaveAttribute('href', expect.stringContaining('/reset-password?token='))
+    forgot.unmount()
+    const missing = renderApp('/reset-password')
+    expect(screen.getByText(/invalid or expired/)).toBeInTheDocument()
+    missing.unmount()
+    renderApp('/reset-password?token=reset-token-value-123456')
+    await seeHeading('Choose a new password')
+    await person.type(screen.getByLabelText('New password'), 'Password4567')
+    await person.click(screen.getByRole('button', { name: 'Save password' }))
+    await seeHeading('Sign in')
+    cleanup()
+  })
 })

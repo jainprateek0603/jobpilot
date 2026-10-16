@@ -2,6 +2,7 @@ import type { z } from 'zod'
 import { reminderPatchSchema, reminderWriteSchema } from '@jobpilot/shared'
 import type { Config } from '../config.js'
 import { AppError } from '../lib/errors.js'
+import { logger } from '../lib/logger.js'
 import { prisma } from '../lib/prisma.js'
 import { ownedReminder, requireLinkedApplication } from './access.js'
 import { draftFollowUp } from './ai-service.js'
@@ -87,60 +88,78 @@ export async function deleteReminder(userId: string, id: string) {
   await prisma.reminder.delete({ where: { id: existing.id } })
 }
 
+const CLAIM_STALE_MS = 10 * 60 * 1000
+
 export async function processDueReminders(config: Config, options: { userId?: string; now?: Date } = {}) {
   const now = options.now ?? new Date()
+  const scope = options.userId ? { userId: options.userId } : {}
+  await prisma.reminder.updateMany({
+    where: { status: 'processing', updatedAt: { lt: new Date(now.getTime() - CLAIM_STALE_MS) }, ...scope },
+    data: { status: 'pending' },
+  })
   const due = await prisma.reminder.findMany({
-    where: {
-      status: 'pending',
-      dueAt: { lte: now },
-      ...(options.userId ? { userId: options.userId } : {}),
-    },
+    where: { status: 'pending', dueAt: { lte: now }, ...scope },
     include: { user: true, application: true },
   })
+  let processed = 0
   for (const reminder of due) {
-    let subject = reminder.emailSubject
-    let body = reminder.emailBody
-    if (reminder.type === 'follow_up' && !body) {
-      const draft = await draftFollowUp(config, {
-        candidate: reminder.user.name,
-        company: reminder.application?.company ?? '',
-        role: reminder.application?.role ?? reminder.title,
-        note: reminder.body,
-      })
-      subject = draft.subject
-      body = draft.body
-    }
-    if (!subject) subject = `Reminder: ${reminder.title}`
-    if (!body) body = reminder.body || reminder.title
-    if (reminder.user.emailReminders) {
-      await sendUserEmail(config, {
-        userId: reminder.userId,
-        reminderId: reminder.id,
-        to: reminder.user.email,
-        subject,
-        body,
-      })
-    } else {
-      await prisma.emailOutbox.create({
-        data: {
+    const claim = await prisma.reminder.updateMany({
+      where: { id: reminder.id, status: 'pending' },
+      data: { status: 'processing' },
+    })
+    if (claim.count !== 1) continue
+    try {
+      let subject = reminder.emailSubject
+      let body = reminder.emailBody
+      if (reminder.type === 'follow_up' && !body) {
+        const draft = await draftFollowUp(config, {
+          candidate: reminder.user.name,
+          company: reminder.application?.company ?? '',
+          role: reminder.application?.role ?? reminder.title,
+          note: reminder.body,
+        })
+        subject = draft.subject
+        body = draft.body
+      }
+      if (!subject) subject = `Reminder: ${reminder.title}`
+      if (!body) body = reminder.body || reminder.title
+      if (reminder.user.emailReminders) {
+        await sendUserEmail(config, {
           userId: reminder.userId,
           reminderId: reminder.id,
-          toAddress: reminder.user.email,
+          to: reminder.user.email,
           subject,
           body,
-          status: 'skipped_preference',
-        },
+        })
+      } else {
+        await prisma.emailOutbox.create({
+          data: {
+            userId: reminder.userId,
+            reminderId: reminder.id,
+            toAddress: reminder.user.email,
+            subject,
+            body,
+            status: 'skipped_preference',
+          },
+        })
+      }
+      await prisma.reminder.update({
+        where: { id: reminder.id },
+        data: { status: 'sent', emailSubject: subject, emailBody: body, sentAt: now },
       })
-    }
-    await prisma.reminder.update({
-      where: { id: reminder.id },
-      data: { status: 'sent', emailSubject: subject, emailBody: body, sentAt: now },
-    })
-    if (reminder.applicationId) {
-      await prisma.timelineEvent.create({
-        data: { applicationId: reminder.applicationId, type: 'reminder', title: 'Reminder sent', body: subject },
+      if (reminder.applicationId) {
+        await prisma.timelineEvent.create({
+          data: { applicationId: reminder.applicationId, type: 'reminder', title: 'Reminder sent', body: subject },
+        })
+      }
+      processed += 1
+    } catch (error) {
+      logger.error('reminder failed', { id: reminder.id, message: error instanceof Error ? error.message : 'unknown' })
+      await prisma.reminder.updateMany({
+        where: { id: reminder.id, status: 'processing' },
+        data: { status: 'pending' },
       })
     }
   }
-  return due.length
+  return processed
 }

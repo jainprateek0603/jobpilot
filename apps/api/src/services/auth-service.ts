@@ -1,8 +1,10 @@
+import { randomBytes } from 'node:crypto'
 import type { Request } from 'express'
 import type { ChangePasswordInput, LoginInput, RegisterInput } from '@jobpilot/shared'
 import type { Config } from '../config.js'
 import { AppError } from '../lib/errors.js'
 import { hashPassword, verifyPassword } from '../lib/password.js'
+import { sendUserEmail } from './mailer.js'
 import { prisma } from '../lib/prisma.js'
 import { hashToken, readRefreshToken, signAccessToken, signRefreshToken } from '../lib/tokens.js'
 
@@ -118,6 +120,50 @@ export async function logoutSession(token: string | undefined) {
     where: { tokenHash: hashToken(token), revokedAt: null },
     data: { revokedAt: new Date() },
   })
+}
+
+const RESET_MESSAGE = 'If that email has an account, you can reset the password.'
+
+export async function requestPasswordReset(email: string, config: Config) {
+  const user = await prisma.user.findUnique({ where: { email } })
+  if (!user) {
+    await hashPassword('not-a-real-password', config.BCRYPT_ROUNDS)
+    return { message: RESET_MESSAGE }
+  }
+  const token = randomBytes(32).toString('base64url')
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
+  await prisma.passwordReset.updateMany({
+    where: { userId: user.id, usedAt: null },
+    data: { usedAt: new Date() },
+  })
+  await prisma.passwordReset.create({
+    data: { userId: user.id, tokenHash: hashToken(token), expiresAt },
+  })
+  const origin = config.CORS_ORIGIN.split(',')[0]?.trim() || 'http://127.0.0.1:5173'
+  const resetUrl = `${origin}/reset-password?token=${encodeURIComponent(token)}`
+  await sendUserEmail(config, {
+    userId: user.id,
+    to: user.email,
+    subject: 'Reset your JobPilot password',
+    body: `Open this link within one hour to choose a new password:\n\n${resetUrl}\n\nIf you did not ask for this, you can ignore it.`,
+  })
+  if (config.NODE_ENV === 'production' || config.SMTP_HOST) return { message: RESET_MESSAGE }
+  return { message: RESET_MESSAGE, resetUrl }
+}
+
+export async function resetPassword(token: string, newPassword: string, config: Config) {
+  const record = await prisma.passwordReset.findUnique({ where: { tokenHash: hashToken(token) } })
+  if (!record || record.usedAt || record.expiresAt.getTime() <= Date.now()) {
+    throw new AppError(400, 'VALIDATION', 'That reset link is invalid or expired')
+  }
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: record.userId },
+      data: { passwordHash: await hashPassword(newPassword, config.BCRYPT_ROUNDS) },
+    }),
+    prisma.passwordReset.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
+    prisma.refreshToken.updateMany({ where: { userId: record.userId, revokedAt: null }, data: { revokedAt: new Date() } }),
+  ])
 }
 
 export async function changePassword(userId: string, input: ChangePasswordInput, config: Config) {

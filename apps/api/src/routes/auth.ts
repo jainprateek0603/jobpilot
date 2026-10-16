@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { changePasswordSchema, loginSchema, registerSchema } from '@jobpilot/shared'
+import { changePasswordSchema, forgotPasswordSchema, loginSchema, registerSchema, resetPasswordSchema } from '@jobpilot/shared'
 import type { Config } from '../config.js'
 import { REFRESH_COOKIE, clearRefreshCookie, setRefreshCookie } from '../lib/cookies.js'
 import { asyncHandler } from '../lib/async.js'
@@ -9,6 +9,8 @@ import { currentUserId, requireAllowedOrigin, requireAuth, withBody } from '../m
 import {
   changePassword,
   getUser,
+  requestPasswordReset,
+  resetPassword,
   loginUser,
   logoutSession,
   refreshSession,
@@ -63,6 +65,21 @@ export function authRouter(config: Config) {
     requireAuth,
     asyncHandler(async (req, res) => {
       res.json({ data: await getUser(currentUserId(req)) })
+    }),
+  )
+
+  router.post(
+    '/forgot-password',
+    withBody(forgotPasswordSchema, async (_req, res, body) => {
+      res.json({ data: await requestPasswordReset(body.email, config) })
+    }),
+  )
+
+  router.post(
+    '/reset-password',
+    withBody(resetPasswordSchema, async (_req, res, body) => {
+      await resetPassword(body.token, body.newPassword, config)
+      res.json({ data: { ok: true } })
     }),
   )
 

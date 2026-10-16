@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '../lib/api'
 import { EmptyState, Spinner } from '../components/ui'
 
@@ -37,16 +36,20 @@ export function DashboardPage() {
       </dl>
       <section>
         <h2 className="mb-3 text-xl">Applications per week</h2>
-        <div className="h-64 border border-line bg-white p-2 dark:border-[#2C3B34] dark:bg-panel">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={report.applicationsPerWeek}>
-              <XAxis dataKey="weekStart" tick={{ fontSize: 11 }} />
-              <YAxis allowDecimals={false} width={32} />
-              <Tooltip />
-              <Bar dataKey="count" fill="#145C38" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <ol className="space-y-2">
+          {report.applicationsPerWeek.map((week) => (
+            <li key={week.weekStart} className="grid grid-cols-[5.5rem_1fr_2rem] items-center gap-3 text-sm">
+              <span>{week.weekStart.slice(5)}</span>
+              <span className="h-3 bg-moss dark:bg-[#24362C]">
+                <span
+                  className="block h-3 bg-pine"
+                  style={{ width: `${week.count === 0 ? 0 : Math.max(8, (week.count / weekMax(report.applicationsPerWeek)) * 100)}%` }}
+                />
+              </span>
+              <span>{week.count}</span>
+            </li>
+          ))}
+        </ol>
         <table className="sr-only">
           <caption>Applications per week</caption>
           <tbody>
@@ -84,6 +87,10 @@ function Stat({ label, value }: { label: string; value: string }) {
       <dd className="mt-1 text-3xl">{value}</dd>
     </div>
   )
+}
+
+function weekMax(weeks: { count: number }[]) {
+  return Math.max(1, ...weeks.map((week) => week.count))
 }
 
 function percent(rate: number) {
