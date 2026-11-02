@@ -22,14 +22,13 @@ jobpilot/
         ai/                   Provider interface and adapters
         jobs/                 Reminder scheduler
         lib/                  Prisma, tokens, errors, SSRF, mail
-        seed/                 Demo data
+        scripts/              Demo data seed
       tests/
     web/                      Vite + React
       src/
         pages/
         components/
         lib/                  API client, auth, theme, board math
-      e2e/                    Playwright specs live at repo /e2e
   packages/
     shared/                   Schemas and pure domain functions
   e2e/

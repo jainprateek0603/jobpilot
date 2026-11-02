@@ -2,6 +2,20 @@
 
 JobPilot is a job-search command center. Track applications on a board, keep more than one resume, tailor a resume to a posting, draft a cover letter, practice interview answers, and see how the search is moving.
 
+## Features
+
+- A board with Wishlist, Applied, Interview, Offer, and Rejected. Cards can be dragged or moved with a control.
+- An application record: company, role, salary, link, notes, contacts, and a timeline.
+- More than one resume, uploaded as a PDF or pasted as text.
+- Resume tailoring that scores a match and lists missing keywords.
+- Cover letters in a chosen tone.
+- Interview questions, practice answers, and feedback.
+- Reminders and follow-up drafts, plus a calendar of dates.
+- A dashboard of applications per week, response rate, interview rate, and the funnel.
+- CSV import and export, and a job-link parser that fills in company and role from common posting URLs.
+- Sign-in, a profile, settings, and a password reset that works while signed out.
+- Dark mode and a layout that works on a phone.
+
 ## Setup
 
 1. Install Node.js 22 or newer.
