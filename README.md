@@ -1,5 +1,9 @@
 # JobPilot
 
+[![CI](https://github.com/jainprateek0603/jobpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/jainprateek0603/jobpilot/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+![Node 22+](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)
+
 JobPilot is a job-search command center. Track applications on a board, keep more than one resume, tailor a resume to a posting, draft a cover letter, practice interview answers, and see how the search is moving.
 
 ## Features
@@ -77,4 +81,4 @@ Set `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` in the shell or a root `.env` b
 - `apps/api` — Express, Prisma, reminders, AI providers
 - `packages/shared` — Zod schemas, CSV, link parsing, analytics
 
-See `ARCHITECTURE.md` for the data model and routes, and `API.md` for request shapes.
+See `ARCHITECTURE.md` for the data model and routes, and `API.md` for request shapes. `CONTRIBUTING.md` lists the checks to run before pushing. JobPilot is released under the MIT license.
